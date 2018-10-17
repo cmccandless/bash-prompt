@@ -130,14 +130,52 @@ parse_git_info()
     fi
 }
 
+join_by()
+{
+    local IFS="$1"
+    shift
+    echo "$*"
+}
+
+trim() {
+    local var="$*"
+    # remove leading whitespace characters
+    var="${var#"${var%%[![:space:]]*}"}"
+    # remove trailing whitespace characters
+    var="${var%"${var##*[![:space:]]}"}"
+    echo -n "$var"
+}
+
+build_prefix()
+{
+    pref=()
+    if [ ! -z "${VIRTUAL_ENV+x}" ]; then
+        pref+=("$(basename "$VIRTUAL_ENV")")
+    fi
+    if [ ! -z "${VIRTUAL_ENV_TOOLS+x}" ]; then
+        pref+=("${ENV_NAME_TOOLS}-tools")
+    fi
+    pref="$(trim "$(join_by '; ' ${pref[@]})")"
+    echo "${pref}"
+}
+
 set_ps1()
 {
-    PS1=''
-    if [ ! -z "${PS1_PREFIX+x}" ]; then
+    PS1=""
+    PS1_PREFIX="$(build_prefix)"
+    # if [ ! -z "${PS1_PREFIX+x}" ]; then
+    if [ ! -z "${PS1_PREFIX}" ]; then
+        PS1_PREFIX="(${PS1_PREFIX})"
         PS1+="$(color $COLOR_PREFIX "$PS1_PREFIX ")"
     fi
 
-    PS1+="$(parse_git_info)"
+    git_info="$(parse_git_info)"
+    if [ ! -z "$git_info" ]; then
+        if [ ! -z "$PS1" ]; then
+            PS1+=' '
+        fi
+        PS1+="$git_info"
+    fi
 
     PS1+="${debian_chroot:+($debian_chroot)}"
     if [ $BOLD_USER -eq 1 ]; then
