@@ -115,7 +115,7 @@ parse_git_info()
                 BRANCH="${BRANCH//\(}"
                 BRANCH="${BRANCH//\)}"
             fi
-            if git status | grep -E 'Changes not staged|Untracked files' > /dev/null; then
+            if git status | grep -E 'Changes not staged|Untracked files|Unmerged paths' > /dev/null; then
                 BRANCH="$(color $COLOR_BRANCH_DIRTY "$BRANCH*")"
             elif git status | grep 'Changes to be committed' > /dev/null; then
                 BRANCH=$(color $COLOR_BRANCH_STAGED "$BRANCH*")
