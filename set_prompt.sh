@@ -98,35 +98,53 @@ color(){
     fi
 }
 
-parse_git_info()
+git_repo()
 {
     REPO=$(git config --get remote.origin.url || git rev-parse --show-toplevel 2> /dev/null)
     if [ $? -eq 0 ]; then
-        REPO="$(basename ${REPO%.git})"
-        BRANCH="$(git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/\1/')"
-        if [[ "$REPO" ]]; then
-            REPO="$(color $COLOR_REPO $REPO)"
-            if [ $BOLD_REPO -eq 1 ]; then
-                REPO="$(bold $REPO)"
-            fi
-            if [ -z "$BRANCH" ]; then
-                BRANCH="$(git status 2> /dev/null | grep -oP '(?<=On branch ).*')"
-            else
-                BRANCH="${BRANCH//\(}"
-                BRANCH="${BRANCH//\)}"
-            fi
-            if git status | grep -E 'Changes not staged|Untracked files|Unmerged paths' > /dev/null; then
-                BRANCH="$(color $COLOR_BRANCH_DIRTY "$BRANCH*")"
-            elif git status | grep 'Changes to be committed' > /dev/null; then
-                BRANCH=$(color $COLOR_BRANCH_STAGED "$BRANCH*")
-            else
-                BRANCH="$(color $COLOR_BRANCH_CLEAN $BRANCH)"
-            fi
-            if [ $BOLD_BRANCH -eq 1 ]; then
-                GIT_INFO+="$(bold $BRANCH)"
-            fi
-            echo "($REPO: $BRANCH)\n"
+        printf "$(basename ${REPO%.git})"
+    fi
+}
+
+git_branch()
+{
+    REPO="$(git_repo)"
+    BRANCH="$(git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/\1/')"
+    if [[ "$REPO" ]]; then
+        REPO="$(color $COLOR_REPO $REPO)"
+        if [ $BOLD_REPO -eq 1 ]; then
+            REPO="$(bold $REPO)"
         fi
+        if [ -z "$BRANCH" ]; then
+            BRANCH="$(git status 2> /dev/null | grep -oP '(?<=On branch ).*')"
+        else
+            BRANCH="${BRANCH//\(}"
+            BRANCH="${BRANCH//\)}"
+        fi
+        printf "$BRANCH"
+    fi
+}
+
+parse_git_info()
+{
+    REPO="$(git_repo)"
+    BRANCH="$(git_branch)"
+    if [[ "$BRANCH" ]]; then
+        REPO="$(color $COLOR_REPO $REPO)"
+        if [ $BOLD_REPO -eq 1 ]; then
+            REPO="$(bold $REPO)"
+        fi
+        if git status | grep -E 'Changes not staged|Untracked files|Unmerged paths' > /dev/null; then
+            BRANCH="$(color $COLOR_BRANCH_DIRTY "$BRANCH*")"
+        elif git status | grep 'Changes to be committed' > /dev/null; then
+            BRANCH=$(color $COLOR_BRANCH_STAGED "$BRANCH*")
+        else
+            BRANCH="$(color $COLOR_BRANCH_CLEAN $BRANCH)"
+        fi
+        if [ $BOLD_BRANCH -eq 1 ]; then
+            GIT_INFO+="$(bold $BRANCH)"
+        fi
+        echo "($REPO: $BRANCH)\n"
     fi
 }
 
