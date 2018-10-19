@@ -85,16 +85,26 @@ bold()
     printf "%s%s%s" '\[\e[1m\]' $1 $(reset_fmt)
 }
 
-color(){
+color_start()
+{
     case "$1" in
-        "#"*) COLOR=$(color_from_hex $1);;
-        *";"*";"*)  COLOR=$1::
+        "#"*) COLOR=$(color_from_hex "$1");;
+        *";"*";"*)  COLOR="$1"::
     esac
+    if [ $USE_16M_COLOR -eq 0 ]; then
+        printf '\[\e[38;5;%dm\]' "$COLOR"
+    else
+        printf '\[\e[038;2;%sm\]' "$COLOR"
+    fi
+}
+
+color(){
+    COLOR="$(color_start "$1")"
     TEXT=$2
     if [ $USE_16M_COLOR -eq 0 ]; then
-        printf '\[\e[38;5;%dm\]%s%s' $COLOR "$TEXT" $(reset_fmt)
+        printf '%s%s%s' $COLOR "$TEXT" $(reset_fmt)
     else
-        printf '\[\e[038;2;%sm\]%s%s' $COLOR "$TEXT" $(reset_fmt)
+        printf '%s%s%s' $COLOR "$TEXT" $(reset_fmt)
     fi
 }
 
