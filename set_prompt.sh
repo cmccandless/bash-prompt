@@ -111,6 +111,9 @@ __ps1_color_start()
 __ps1_color(){
     COLOR="$(__ps1_color_start "$1")"
     TEXT=$2
+    if [ -z "$TEXT" ]; then
+        return
+    fi
     if [ $PS1_USE_16M_COLOR -eq 0 ]; then
         printf '%s%s%s' $COLOR "$TEXT" $(__ps1_reset_fmt)
     else
@@ -145,27 +148,30 @@ __ps1_git_branch()
     fi
 }
 
+__ps1_sub()
+{
+    PLACEHOLDER="$1"
+    SUB="$2"
+    echo "$PLACEHOLDER" | sed s'/%%/'"$SUB"'/'
+}
+
 __ps1_git_info()
 {
     REPO="$(__ps1_git_repo)"
     BRANCH="$(__ps1_git_branch)"
     if [[ "$BRANCH" ]]; then
-        REPO="$(__ps1_color $COLOR_REPO $REPO)"
-        if [ $BOLD_REPO -eq 1 ]; then
-            REPO="$(__ps1_bold $REPO)"
-        fi
+        REPO="$(__ps1_sub "$_PS1_PLACEHOLDER_GIT_REPO" "$REPO")"
         if git status | grep -E 'Changes not staged|Untracked files|Unmerged paths' > /dev/null; then
-            BRANCH="$(__ps1_color $COLOR_BRANCH_DIRTY "$BRANCH*")"
+            BRANCH="$(__ps1_sub "$_PS1_PLACEHOLDER_GIT_BRANCH_DIRTY" "$BRANCH")"
         elif git status | grep 'Changes to be committed' > /dev/null; then
-            BRANCH=$(__ps1_color $COLOR_BRANCH_STAGED "$BRANCH*")
+            BRANCH="$(__ps1_sub "$_PS1_PLACEHOLDER_GIT_BRANCH_STAGED" "$BRANCH")"
         else
-            BRANCH="$(__ps1_color $COLOR_BRANCH_CLEAN $BRANCH)"
+            BRANCH="$(__ps1_sub "$_PS1_PLACEHOLDER_GIT_BRANCH_CLEAN" "$BRANCH")"
         fi
-        if [ $BOLD_BRANCH -eq 1 ]; then
-            GIT_INFO+="$(__ps1_bold $BRANCH)"
-        fi
-        echo "($REPO: $BRANCH)\n"
+        echo "($REPO: $BRANCH)"
+        return 0
     fi
+    return 1
 }
 
 __ps1_join_by()
@@ -184,6 +190,16 @@ __ps1_trim() {
     echo -n "$var"
 }
 
+__ps1_strip_prefix()
+{
+    if [ ! -z "${VIRTUAL_ENV+x}" ]; then
+        export PS1="${PS1//"($(basename $VIRTUAL_ENV)) "}"
+    fi
+    if [ ! -z "${VIRTUAL_ENV_TOOLS+x}" ]; then
+        export PS1="${PS1//"(${ENV_NAME_TOOLS} tools) "}"
+    fi
+}
+
 __ps1_build_prefix()
 {
     pref=()
@@ -197,52 +213,54 @@ __ps1_build_prefix()
     echo "${pref}"
 }
 
-__ps1_set()
+__ps1_prefix()
 {
-    PS1=""
-    PS1_PREFIX="$(__ps1_build_prefix)"
-    # if [ ! -z "${PS1_PREFIX+x}" ]; then
-    if [ ! -z "${PS1_PREFIX}" ]; then
-        PS1_PREFIX="(${PS1_PREFIX})"
-        PS1+="$(__ps1_color $COLOR_PREFIX "$PS1_PREFIX ")"
+    pref="$(__ps1_build_prefix)"
+    if [ -z "$pref" ]; then
+        return 1
     fi
-
-    git_info="$(__ps1_git_info)"
-    if [ ! -z "$git_info" ]; then
-        if [ ! -z "$PS1" ]; then
-            PS1+=' '
-        fi
-        PS1+="$git_info"
-    fi
-
-    PS1+="${debian_chroot:+($debian_chroot)}"
-    if [ $BOLD_USER -eq 1 ]; then
-        PS1+="$(__ps1_bold $(__ps1_color $COLOR_USER \\u))"
-    else
-        PS1+="$(__ps1_color $COLOR_USER \\u)"
-    fi
-    PS1+="@"
-    if [ $BOLD_HOST -eq 1 ]; then
-        PS1+="$(__ps1_bold $(__ps1_color $COLOR_HOST \\h))"
-    else
-        PS1+="$(__ps1_color $COLOR_HOST \\h)"
-    fi
-    PS1+=":"
-    if [ $BOLD_CWD -eq 1 ]; then
-        PS1+="$(__ps1_bold $(__ps1_color $COLOR_CWD \\w))"
-    else
-        PS1+="$(__ps1_color $COLOR_CWD \\w)"
-    fi
-    if [ $BOLD_END -eq 1 ]; then
-        PS1+="$(__ps1_bold $(__ps1_color $COLOR_END \\$))"
-    else
-        PS1+="$(__ps1_color $COLOR_END \\$)"
-    fi
-    PS1+=" "
-
-    export PS1
+    echo "$(__ps1_sub "$_PS1_PLACEHOLDER_PREFIX" "($pref)") "
+    return 0
 }
 
-if [[ ! "$PROMPT_COMMAND" = *"__ps1_set"* ]]; then
-    PROMPT_COMMAND+='__ps1_set;'
-fi
+render()
+{
+    TEXT="$1"
+    COLOR="$2"
+    BOLD="${3:-0}"
+    local ph
+    ph="$(__ps1_color $COLOR "$TEXT")"
+    if [ $BOLD -eq 1 ]; then
+        ph="$(__ps1_bold "$ph")"
+    fi
+    echo "$ph"
+}
+
+create_ph()
+{
+    local ph
+    ph="$(render '%%' $@)"
+    ph="${ph//\\[}"
+    ph="${ph//\\]}"
+    echo "$ph"
+}
+
+# Pre-render colors
+_PS1_PLACEHOLDER_PREFIX="$(create_ph $COLOR_PREFIX $BOLD_PREFIX)"
+
+# Git Placeholders
+_PS1_PLACEHOLDER_GIT_REPO="$(create_ph $COLOR_REPO $BOLD_REPO)"
+_PS1_PLACEHOLDER_GIT_BRANCH_DIRTY="$(create_ph $COLOR_BRANCH_DIRTY $BOLD_BRANCH)"
+_PS1_PLACEHOLDER_GIT_BRANCH_STAGED="$(create_ph $COLOR_BRANCH_STAGED $BOLD_BRANCH)"
+_PS1_PLACEHOLDER_GIT_BRANCH_CLEAN="$(create_ph $COLOR_BRANCH_CLEAN $BOLD_BRANCH)"
+
+_PS1_COLORED_USER="$(render \\u $COLOR_USER $BOLD_USER)"
+_PS1_COLORED_HOST="$(render \\h $COLOR_HOST $BOLD_HOST)"
+_PS1_COLORED_CWD="$(render \\w $COLOR_CWD $BOLD_CWD)"
+_PS1_COLORED_END="$(render \\$ $COLOR_END $BOLD_END)"
+
+_PS1_BASE="${debian_chroot:+($debian_chroot)}$_PS1_COLORED_USER@"
+_PS1_BASE+="$_PS1_COLORED_HOST:$_PS1_COLORED_CWD$_PS1_COLORED_END "
+
+export PS1='$(__ps1_prefix)$(__ps1_git_info && echo \\n && tput cuu1 && tput el1)'"$_PS1_BASE"
+PROMPT_COMMAND='__ps1_strip_prefix'
