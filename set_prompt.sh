@@ -11,6 +11,11 @@ __ps1_create_config()
     echo '# Settings: 0 or 1'
     echo 'export PS1_DEBUG=0'
     echo 'export PS1_USE_16M_COLOR=1'
+    echo 'export SHOW_GIT_INFO=1'
+    echo 'export SHOW_LAST_RESULT=0'
+    echo
+    echo 'export SYMBOL_SUCCESS="✔️"'
+    echo 'export SYMBOL_FAIL="❌"'
     echo
     echo '# lowercase: decimal'
     echo '# uppercase: hexadecimal'
@@ -28,6 +33,8 @@ __ps1_create_config()
     echo 'export COLOR_BRANCH_DIRTY="#f00"'
     echo '# Used for '$' at end of prompt'
     echo 'export COLOR_END="#fff"'
+    echo 'export COLOR_SUCCESS="#0f0"'
+    echo 'export COLOR_FAIL="#f00"'
     echo
     echo 'export BOLD_USER=1'
     echo 'export BOLD_HOST=1'
@@ -92,7 +99,9 @@ __ps1_reset_fmt(){
 
 __ps1_bold()
 {
-    printf "%s%s%s" '\[\e[1m\]' $1 $(__ps1_reset_fmt)
+    if [ ! -z "$1" ]; then
+        printf "%s%s%s" '\[\e[1m\]' $1 $(__ps1_reset_fmt)
+    fi
 }
 
 __ps1_color_start()
@@ -109,11 +118,15 @@ __ps1_color_start()
 }
 
 __ps1_color(){
-    COLOR="$(__ps1_color_start "$1")"
     TEXT=$2
     if [ -z "$TEXT" ]; then
         return
     fi
+    if [ -z "$1" ]; then
+        echo "$TEXT"
+        return
+    fi
+    COLOR="$(__ps1_color_start "$1")"
     if [ $PS1_USE_16M_COLOR -eq 0 ]; then
         printf '%s%s%s' $COLOR "$TEXT" $(__ps1_reset_fmt)
     else
@@ -259,8 +272,25 @@ _PS1_COLORED_HOST="$(render \\h $COLOR_HOST $BOLD_HOST)"
 _PS1_COLORED_CWD="$(render \\w $COLOR_CWD $BOLD_CWD)"
 _PS1_COLORED_END="$(render \\$ $COLOR_END $BOLD_END)"
 
-_PS1_BASE="${debian_chroot:+($debian_chroot)}$_PS1_COLORED_USER@"
-_PS1_BASE+="$_PS1_COLORED_HOST:$_PS1_COLORED_CWD$_PS1_COLORED_END "
+_PS1_COLORED_SUCCESS="$(__ps1_sub $(create_ph $COLOR_SUCCESS) "$SYMBOL_SUCCESS")"
+_PS1_COLORED_FAIL="$(__ps1_sub $(create_ph $COLOR_FAIL) "$SYMBOL_FAIL")"
 
-export PS1='$(__ps1_prefix)$(__ps1_git_info && tput el1)'"$_PS1_BASE"
+_PS1_BASE="${debian_chroot:+($debian_chroot)}$_PS1_COLORED_USER@"
+_PS1_BASE+="$_PS1_COLORED_HOST:$_PS1_COLORED_CWD"
+
+PS1='$('
+PS1+='ret=$?;'
+PS1+='__ps1_prefix;'
+if [ "$SHOW_GIT_INFO" -eq 1 ]; then
+    PS1+='__ps1_git_info && tput el1;'
+fi
+if [ "$SHOW_LAST_RESULT" -eq 1 ]; then
+    PS1+='if [[ $ret == 0 ]];'
+    PS1+='then echo "$_PS1_COLORED_SUCCESS ";'
+    PS1+='else echo "$_PS1_COLORED_FAIL ";'
+    PS1+='fi'
+fi
+PS1+=")$_PS1_BASE"
+PS1+="$_PS1_COLORED_END "
+export PS1
 PROMPT_COMMAND='__ps1_strip_prefix'
