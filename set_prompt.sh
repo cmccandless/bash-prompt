@@ -232,7 +232,7 @@ __ps1_prefix()
     if [ -z "$pref" ]; then
         return 1
     fi
-    echo "$(__ps1_sub "$_PS1_PLACEHOLDER_PREFIX" "($pref)") "
+    printf "$(__ps1_sub "$_PS1_PLACEHOLDER_PREFIX" "($pref)") "
     return 0
 }
 
@@ -282,12 +282,12 @@ PS1='$('
 PS1+='ret=$?;'
 PS1+='__ps1_prefix;'
 if [ "$SHOW_GIT_INFO" -eq 1 ]; then
-    PS1+='__ps1_git_info && tput el1;'
+    PS1+='__ps1_git_info;'
 fi
 if [ "$SHOW_LAST_RESULT" -eq 1 ]; then
     PS1+='if [[ $ret == 0 ]];'
-    PS1+='then echo "$_PS1_COLORED_SUCCESS ";'
-    PS1+='else echo "$_PS1_COLORED_FAIL ";'
+    PS1+='then printf "$_PS1_COLORED_SUCCESS ";'
+    PS1+='else printf "$_PS1_COLORED_FAIL ";'
     PS1+='fi'
 fi
 PS1+=")$_PS1_BASE"
