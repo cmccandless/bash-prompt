@@ -262,5 +262,5 @@ _PS1_COLORED_END="$(render \\$ $COLOR_END $BOLD_END)"
 _PS1_BASE="${debian_chroot:+($debian_chroot)}$_PS1_COLORED_USER@"
 _PS1_BASE+="$_PS1_COLORED_HOST:$_PS1_COLORED_CWD$_PS1_COLORED_END "
 
-export PS1='$(__ps1_prefix)$(__ps1_git_info && echo \\n && tput cuu1 && tput el1)'"$_PS1_BASE"
+export PS1='$(__ps1_prefix)$(__ps1_git_info && tput el1)'"$_PS1_BASE"
 PROMPT_COMMAND='__ps1_strip_prefix'
