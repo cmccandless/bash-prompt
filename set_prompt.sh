@@ -258,7 +258,7 @@ if [[ $SHOW_GIT_INFO == 1 ]]; then
     PS1+='printf "$COLOR_BRANCH_CLEAN";'
     PS1+='fi;'
     PS1+='printf "\]$(__ps1_git_branch)\[$RESET_UNESCAPED\])";'
-    PS1+='printf "\n\[$RESET_UNESCAPED\]";'
+    PS1+='printf "\n";'
     PS1+='fi;'
 fi
 if [ "$SHOW_LAST_RESULT" -eq 1 ]; then
