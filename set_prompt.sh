@@ -4,6 +4,12 @@
 
 PS1_CONFIG_FILE="${HOME}/.config/ps1"
 
+strip_brackets()
+{
+    s="${1//\\[}"
+    printf "${s//\\]}"
+}
+
 __ps1_create_config()
 {
     echo '#!/bin/bash'
@@ -42,6 +48,7 @@ __ps1_create_config()
     echo 'export BOLD_REPO=0'
     echo 'export BOLD_BRANCH=0'
     echo 'export BOLD_END=0'
+    echo 'export BOLD_LAST_RESULT=0'
 }
 
 if [ ! -f "$PS1_CONFIG_FILE" ]; then
@@ -93,16 +100,11 @@ __ps1_color_from_hex(){
     echo $index
 }
 
-__ps1_reset_fmt(){
-    printf '\[\e[0m\]'
-}
+RESET='\[\e[0m\]'
+RESET_UNESCAPED='\e[0m'
 
-__ps1_bold()
-{
-    if [ ! -z "$1" ]; then
-        printf "%s%s%s" '\[\e[1m\]' $1 $(__ps1_reset_fmt)
-    fi
-}
+BOLD='\[\e[1m\]'
+BOLD_UNESCAPED='\e[1m'
 
 __ps1_color_start()
 {
@@ -127,11 +129,7 @@ __ps1_color(){
         return
     fi
     COLOR="$(__ps1_color_start "$1")"
-    if [ $PS1_USE_16M_COLOR -eq 0 ]; then
-        printf '%s%s%s' $COLOR "$TEXT" $(__ps1_reset_fmt)
-    else
-        printf '%s%s%s' $COLOR "$TEXT" $(__ps1_reset_fmt)
-    fi
+    printf '%s%s%s' $COLOR "$TEXT" "$RESET"
 }
 
 __ps1_git_repo()
@@ -147,10 +145,6 @@ __ps1_git_branch()
     REPO="$(__ps1_git_repo)"
     BRANCH="$(git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/\1/')"
     if [[ "$REPO" ]]; then
-        REPO="$(__ps1_color $COLOR_REPO $REPO)"
-        if [ $BOLD_REPO -eq 1 ]; then
-            REPO="$(__ps1_bold $REPO)"
-        fi
         if [ -z "$BRANCH" ]; then
             BRANCH="$(git status 2> /dev/null | grep -oP '(?<=On branch ).*')"
         else
@@ -159,32 +153,6 @@ __ps1_git_branch()
         fi
         printf "$BRANCH"
     fi
-}
-
-__ps1_sub()
-{
-    PLACEHOLDER="$1"
-    SUB="$2"
-    echo "$PLACEHOLDER" | sed s'/%%/'"$SUB"'/'
-}
-
-__ps1_git_info()
-{
-    REPO="$(__ps1_git_repo)"
-    BRANCH="$(__ps1_git_branch)"
-    if [[ "$BRANCH" ]]; then
-        REPO="$(__ps1_sub "$_PS1_PLACEHOLDER_GIT_REPO" "$REPO")"
-        if git status | grep -E 'Changes not staged|Untracked files|Unmerged paths' > /dev/null; then
-            BRANCH="$(__ps1_sub "$_PS1_PLACEHOLDER_GIT_BRANCH_DIRTY" "$BRANCH")"
-        elif git status | grep 'Changes to be committed' > /dev/null; then
-            BRANCH="$(__ps1_sub "$_PS1_PLACEHOLDER_GIT_BRANCH_STAGED" "$BRANCH")"
-        else
-            BRANCH="$(__ps1_sub "$_PS1_PLACEHOLDER_GIT_BRANCH_CLEAN" "$BRANCH")"
-        fi
-        echo "($REPO: $BRANCH)"
-        return 0
-    fi
-    return 1
 }
 
 __ps1_join_by()
@@ -213,7 +181,7 @@ __ps1_strip_prefix()
     fi
 }
 
-__ps1_build_prefix()
+__ps1_prefix()
 {
     pref=()
     if [ ! -z "${VIRTUAL_ENV+x}" ]; then
@@ -222,75 +190,90 @@ __ps1_build_prefix()
     if [ ! -z "${VIRTUAL_ENV_TOOLS+x}" ]; then
         pref+=("${ENV_NAME_TOOLS}-tools")
     fi
-    pref="$(__ps1_trim "$(__ps1_join_by '; ' ${pref[@]})")"
-    echo "${pref}"
-}
-
-__ps1_prefix()
-{
-    pref="$(__ps1_build_prefix)"
-    if [ -z "$pref" ]; then
+    if [[ "${#pref}" == 0 ]]; then
         return 1
     fi
-    printf "$(__ps1_sub "$_PS1_PLACEHOLDER_PREFIX" "($pref)") "
+    pref="$(__ps1_trim "$(__ps1_join_by '; ' ${pref[@]})")"
+    printf "($pref) "
     return 0
 }
 
-render()
+do_bold()
 {
-    TEXT="$1"
-    COLOR="$2"
-    BOLD="${3:-0}"
-    local ph
-    ph="$(__ps1_color $COLOR "$TEXT")"
-    if [ $BOLD -eq 1 ]; then
-        ph="$(__ps1_bold "$ph")"
-    fi
-    echo "$ph"
+    [[ $1 == 1 ]] && printf "$BOLD_UNESCAPED"
 }
 
-create_ph()
+git_dirty()
 {
-    local ph
-    ph="$(render '%%' $@)"
-    ph="${ph//\\[}"
-    ph="${ph//\\]}"
-    echo "$ph"
+    git status | grep -E "Changes not staged|Untracked files|Unmerged Paths" > /dev/null
+}
+
+git_staged()
+{
+    git status | grep 'Changes to be committed' > /dev/null
 }
 
 # Pre-render colors
-_PS1_PLACEHOLDER_PREFIX="$(create_ph $COLOR_PREFIX $BOLD_PREFIX)"
+COLOR_PREFIX="$(strip_brackets "$(__ps1_color_start $COLOR_PREFIX)")"
+BOLD_PREFIX="$(do_bold $BOLD_PREFIX)"
 
-# Git Placeholders
-_PS1_PLACEHOLDER_GIT_REPO="$(create_ph $COLOR_REPO $BOLD_REPO)"
-_PS1_PLACEHOLDER_GIT_BRANCH_DIRTY="$(create_ph $COLOR_BRANCH_DIRTY $BOLD_BRANCH)"
-_PS1_PLACEHOLDER_GIT_BRANCH_STAGED="$(create_ph $COLOR_BRANCH_STAGED $BOLD_BRANCH)"
-_PS1_PLACEHOLDER_GIT_BRANCH_CLEAN="$(create_ph $COLOR_BRANCH_CLEAN $BOLD_BRANCH)"
+COLOR_REPO="$(strip_brackets "$(__ps1_color_start $COLOR_REPO)")"
+BOLD_REPO="$(do_bold $BOLD_REPO)"
 
-_PS1_COLORED_USER="$(render \\u $COLOR_USER $BOLD_USER)"
-_PS1_COLORED_HOST="$(render \\h $COLOR_HOST $BOLD_HOST)"
-_PS1_COLORED_CWD="$(render \\w $COLOR_CWD $BOLD_CWD)"
-_PS1_COLORED_END="$(render \\$ $COLOR_END $BOLD_END)"
+COLOR_BRANCH_DIRTY="$(strip_brackets "$(__ps1_color_start $COLOR_BRANCH_DIRTY)")"
+COLOR_BRANCH_STAGED="$(strip_brackets "$(__ps1_color_start $COLOR_BRANCH_STAGED)")"
+COLOR_BRANCH_CLEAN="$(strip_brackets "$(__ps1_color_start $COLOR_BRANCH_CLEAN)")"
+BOLD_BRANCH="$(do_bold $BOLD_BRANCH)"
 
-_PS1_COLORED_SUCCESS="$(__ps1_sub $(create_ph $COLOR_SUCCESS) "$SYMBOL_SUCCESS")"
-_PS1_COLORED_FAIL="$(__ps1_sub $(create_ph $COLOR_FAIL) "$SYMBOL_FAIL")"
+COLOR_SUCCESS="$(strip_brackets "$(__ps1_color_start $COLOR_SUCCESS)")"
+COLOR_FAIL="$(strip_brackets "$(__ps1_color_start $COLOR_FAIL)")"
+BOLD_LAST_RESULT="$(do_bold $BOLD_LAST_RESULT)"
 
-_PS1_BASE="${debian_chroot:+($debian_chroot)}$_PS1_COLORED_USER@"
-_PS1_BASE+="$_PS1_COLORED_HOST:$_PS1_COLORED_CWD"
+COLOR_USER="$(strip_brackets "$(__ps1_color_start $COLOR_USER)")"
+BOLD_USER="$(do_bold $BOLD_USER)"
+COLOR_HOST="$(strip_brackets "$(__ps1_color_start $COLOR_HOST)")"
+BOLD_HOST="$(do_bold $BOLD_HOST)"
+COLOR_CWD="$(strip_brackets "$(__ps1_color_start $COLOR_CWD)")"
+BOLD_CWD="$(do_bold $BOLD_CWD)"
+COLOR_END="$(strip_brackets "$(__ps1_color_start $COLOR_END)")"
+BOLD_END="$(do_bold $BOLD_END)"
 
 PS1='$('
 PS1+='ret=$?;'
-PS1+='__ps1_prefix;'
-if [ "$SHOW_GIT_INFO" -eq 1 ]; then
-    PS1+='__ps1_git_info;'
+PS1+='prefix="$(__ps1_prefix)";'
+PS1+='if [[ $? == 0 ]]; then '
+PS1+='printf "\[$BOLD_PREFIX$COLOR_PREFIX\]$prefix\[$RESET_UNESCAPED\]";'
+PS1+='fi;'
+if [[ $SHOW_GIT_INFO == 1 ]]; then
+#     PS1+='printf "\[$(__ps1_git_info)\]" && tput el1;'
+    PS1+='if git status &> /dev/null; then '
+    PS1+='printf "(";'
+    PS1+='printf "\[$BOLD_REPO$COLOR_REPO\]$(__ps1_git_repo)\[$RESET_UNESCAPED\]: ";'
+    PS1+='printf "\[$BOLD_BRANCH";'
+    PS1+='if git_dirty; then '
+    PS1+='printf "$COLOR_BRANCH_DIRTY";'
+    PS1+='elif git_staged; then ';
+    PS1+='printf "$COLOR_BRANCH_STAGED";'
+    PS1+='else ';
+    PS1+='printf "$COLOR_BRANCH_CLEAN";'
+    PS1+='fi;'
+    PS1+='printf "\]$(__ps1_git_branch)\[$RESET_UNESCAPED\])";'
+    PS1+='printf "\n\[$RESET_UNESCAPED\]";'
+    PS1+='fi;'
 fi
 if [ "$SHOW_LAST_RESULT" -eq 1 ]; then
-    PS1+='if [[ $ret == 0 ]];'
-    PS1+='then printf "$_PS1_COLORED_SUCCESS ";'
-    PS1+='else printf "$_PS1_COLORED_FAIL ";'
-    PS1+='fi'
+    PS1+='printf "\[$BOLD_LAST_RESULT";'
+    PS1+='if [[ $ret == 0 ]]; then '
+    PS1+='printf "$COLOR_SUCCESS\]$SYMBOL_SUCCESS";'
+    PS1+='else '
+    PS1+='printf "$COLOR_FAIL\]$SYMBOL_FAIL";'
+    PS1+='fi;'
+    PS1+='printf "\[$RESET_UNESCAPED\] ";'
 fi
-PS1+=")$_PS1_BASE"
-PS1+="$_PS1_COLORED_END "
+PS1+=")${debian_chroot:+($debian_chroot)}"
+PS1+="\[$BOLD_USER$COLOR_USER\]\\u\[$RESET_UNESCAPED\]@"
+PS1+="\[$BOLD_HOST$COLOR_HOST\]\\h\[$RESET_UNESCAPED\]:"
+PS1+="\[$BOLD_CWD$COLOR_CWD\]\\w\[$RESET_UNESCAPED\]"
+PS1+="\[$BOLD_END$COLOR_END\]\\$\[$RESET_UNESCAPED\] "
 export PS1
 PROMPT_COMMAND='__ps1_strip_prefix'
