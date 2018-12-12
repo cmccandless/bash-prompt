@@ -4,11 +4,8 @@
 
 PS1_CONFIG_FILE="${HOME}/.config/ps1"
 
-strip_brackets()
-{
-    s="${1//\\[}"
-    printf "${s//\\]}"
-}
+_PS1_RESET='\e[0m'
+_PS1_BOLD='\e[1m'
 
 __ps1_create_config()
 {
@@ -63,11 +60,6 @@ __ps1_dbg()
     fi
 }
 
-__ps1_dec2hex()
-{
-    echo "obase=16; $1" | bc
-}
-
 __ps1_octal_digit()
 {
     x=$1
@@ -100,36 +92,17 @@ __ps1_color_from_hex(){
     echo $index
 }
 
-RESET='\[\e[0m\]'
-RESET_UNESCAPED='\e[0m'
-
-BOLD='\[\e[1m\]'
-BOLD_UNESCAPED='\e[1m'
-
-__ps1_color_start()
+__ps1_color()
 {
     case "$1" in
         "#"*) COLOR=$(__ps1_color_from_hex "$1");;
         *";"*";"*)  COLOR="$1"::
     esac
     if [ $PS1_USE_16M_COLOR -eq 0 ]; then
-        printf '\[\e[38;5;%dm\]' "$COLOR"
+        printf '\e[38;5;%dm' "$COLOR"
     else
-        printf '\[\e[038;2;%sm\]' "$COLOR"
+        printf '\e[038;2;%sm' "$COLOR"
     fi
-}
-
-__ps1_color(){
-    TEXT=$2
-    if [ -z "$TEXT" ]; then
-        return
-    fi
-    if [ -z "$1" ]; then
-        echo "$TEXT"
-        return
-    fi
-    COLOR="$(__ps1_color_start "$1")"
-    printf '%s%s%s' $COLOR "$TEXT" "$RESET"
 }
 
 __ps1_git_repo()
@@ -198,9 +171,9 @@ __ps1_prefix()
     return 0
 }
 
-do_bold()
+__ps1_bold()
 {
-    [[ $1 == 1 ]] && printf "$BOLD_UNESCAPED"
+    [[ $1 == 1 ]] && printf "$_PS1_BOLD"
 }
 
 git_dirty()
@@ -213,67 +186,73 @@ git_staged()
     git status | grep 'Changes to be committed' > /dev/null
 }
 
-# Pre-render colors
-COLOR_PREFIX="$(strip_brackets "$(__ps1_color_start $COLOR_PREFIX)")"
-BOLD_PREFIX="$(do_bold $BOLD_PREFIX)"
+set_prompt()
+{
+    # Pre-render colors
+    colorPrefix="$(__ps1_color $COLOR_PREFIX)"
+    boldPrefix="$(__ps1_bold $BOLD_PREFIX)"
 
-COLOR_REPO="$(strip_brackets "$(__ps1_color_start $COLOR_REPO)")"
-BOLD_REPO="$(do_bold $BOLD_REPO)"
+    colorRepo="$(__ps1_color $COLOR_REPO)"
+    boldRepo="$(__ps1_bold $BOLD_REPO)"
 
-COLOR_BRANCH_DIRTY="$(strip_brackets "$(__ps1_color_start $COLOR_BRANCH_DIRTY)")"
-COLOR_BRANCH_STAGED="$(strip_brackets "$(__ps1_color_start $COLOR_BRANCH_STAGED)")"
-COLOR_BRANCH_CLEAN="$(strip_brackets "$(__ps1_color_start $COLOR_BRANCH_CLEAN)")"
-BOLD_BRANCH="$(do_bold $BOLD_BRANCH)"
+    colorBranchDirty="$(__ps1_color $COLOR_BRANCH_DIRTY)"
+    colorBranchStaged="$(__ps1_color $COLOR_BRANCH_STAGED)"
+    colorBranchClean="$(__ps1_color $COLOR_BRANCH_CLEAN)"
+    boldBranch="$(__ps1_bold $BOLD_BRANCH)"
 
-COLOR_SUCCESS="$(strip_brackets "$(__ps1_color_start $COLOR_SUCCESS)")"
-COLOR_FAIL="$(strip_brackets "$(__ps1_color_start $COLOR_FAIL)")"
-BOLD_LAST_RESULT="$(do_bold $BOLD_LAST_RESULT)"
+    colorSuccess="$(__ps1_color $COLOR_SUCCESS)"
+    colorFail="$(__ps1_color $COLOR_FAIL)"
+    boldLastResult="$(__ps1_bold $BOLD_LAST_RESULT)"
 
-COLOR_USER="$(strip_brackets "$(__ps1_color_start $COLOR_USER)")"
-BOLD_USER="$(do_bold $BOLD_USER)"
-COLOR_HOST="$(strip_brackets "$(__ps1_color_start $COLOR_HOST)")"
-BOLD_HOST="$(do_bold $BOLD_HOST)"
-COLOR_CWD="$(strip_brackets "$(__ps1_color_start $COLOR_CWD)")"
-BOLD_CWD="$(do_bold $BOLD_CWD)"
-COLOR_END="$(strip_brackets "$(__ps1_color_start $COLOR_END)")"
-BOLD_END="$(do_bold $BOLD_END)"
+    colorUser="$(__ps1_color $COLOR_USER)"
+    boldUser="$(__ps1_bold $BOLD_USER)"
+    colorHost="$(__ps1_color $COLOR_HOST)"
+    boldHost="$(__ps1_bold $BOLD_HOST)"
+    colorCwd="$(__ps1_color $COLOR_CWD)"
+    boldCwd="$(__ps1_bold $BOLD_CWD)"
+    colorEnd="$(__ps1_color $COLOR_END)"
+    boldEnd="$(__ps1_bold $BOLD_END)"
 
-PS1='$('
-PS1+='ret=$?;'
-PS1+='prefix="$(__ps1_prefix)";'
-PS1+='if [[ $? == 0 ]]; then '
-PS1+='printf "\[$BOLD_PREFIX$COLOR_PREFIX\]$prefix\[$RESET_UNESCAPED\]";'
-PS1+='fi;'
-if [[ $SHOW_GIT_INFO == 1 ]]; then
-#     PS1+='printf "\[$(__ps1_git_info)\]" && tput el1;'
-    PS1+='if git status &> /dev/null; then '
-    PS1+='printf "(";'
-    PS1+='printf "\[$BOLD_REPO$COLOR_REPO\]$(__ps1_git_repo)\[$RESET_UNESCAPED\]: ";'
-    PS1+='printf "\[$BOLD_BRANCH";'
-    PS1+='if git_dirty; then '
-    PS1+='printf "$COLOR_BRANCH_DIRTY";'
-    PS1+='elif git_staged; then ';
-    PS1+='printf "$COLOR_BRANCH_STAGED";'
-    PS1+='else ';
-    PS1+='printf "$COLOR_BRANCH_CLEAN";'
+    PS1='$('
+    PS1+='ret=$?;'
+    PS1+='prefix="$(__ps1_prefix)";'
+    PS1+='if [[ $? == 0 ]]; then '
+    PS1+='printf "\[${boldPrefix}${colorPrefix}\]$prefix\[$_PS1_RESET\]";'
     PS1+='fi;'
-    PS1+='printf "\]$(__ps1_git_branch)\[$RESET_UNESCAPED\])";'
-    PS1+='printf "\n";'
-    PS1+='fi;'
-fi
-if [ "$SHOW_LAST_RESULT" -eq 1 ]; then
-    PS1+='printf "\[$BOLD_LAST_RESULT";'
-    PS1+='if [[ $ret == 0 ]]; then '
-    PS1+='printf "$COLOR_SUCCESS\]$SYMBOL_SUCCESS";'
-    PS1+='else '
-    PS1+='printf "$COLOR_FAIL\]$SYMBOL_FAIL";'
-    PS1+='fi;'
-    PS1+='printf "\[$RESET_UNESCAPED\] ";'
-fi
-PS1+=")${debian_chroot:+($debian_chroot)}"
-PS1+="\[$BOLD_USER$COLOR_USER\]\\u\[$RESET_UNESCAPED\]@"
-PS1+="\[$BOLD_HOST$COLOR_HOST\]\\h\[$RESET_UNESCAPED\]:"
-PS1+="\[$BOLD_CWD$COLOR_CWD\]\\w\[$RESET_UNESCAPED\]"
-PS1+="\[$BOLD_END$COLOR_END\]\\$\[$RESET_UNESCAPED\] "
-export PS1
+    if [[ $SHOW_GIT_INFO == 1 ]]; then
+    #     PS1+='printf "\[$(__ps1_git_info)\]" && tput el1;'
+        PS1+='if git status &> /dev/null; then '
+        PS1+='printf "(";'
+        PS1+='printf "\[${boldRepo}${colorRepo}\]$(__ps1_git_repo)\[$_PS1_RESET\]: ";'
+        PS1+='printf "\[${boldBranch}";'
+        PS1+='if git_dirty; then '
+        PS1+='printf "${colorBranchDirty}";'
+        PS1+='elif git_staged; then ';
+        PS1+='printf "${colorBranchStaged}";'
+        PS1+='else ';
+        PS1+='printf "${colorBranchClean}";'
+        PS1+='fi;'
+        PS1+='printf "\]$(__ps1_git_branch)\[$_PS1_RESET\])";'
+        PS1+='printf "\n";'
+        PS1+='fi;'
+    fi
+    if [ "$SHOW_LAST_RESULT" -eq 1 ]; then
+        PS1+='printf "\[${boldLastResult}";'
+        PS1+='if [[ $ret == 0 ]]; then '
+        PS1+='printf "${colorSuccess}\]$SYMBOL_SUCCESS";'
+        PS1+='else '
+        PS1+='printf "${colorFail}\]$SYMBOL_FAIL";'
+        PS1+='fi;'
+        PS1+='printf "\[$_PS1_RESET\] ";'
+    fi
+    PS1+=")"
+    PS1+="${debian_chroot:+($debian_chroot)}"
+    PS1+="\[${boldUser}${colorUser}\]\\u\[$_PS1_RESET\]@"
+    PS1+="\[${boldHost}${colorHost}\]\\h\[$_PS1_RESET\]:"
+    PS1+="\[${boldCwd}${colorCwd}\]\\w\[$_PS1_RESET\]"
+    PS1+="\[${boldEnd}${colorEnd}\]\\$\[$_PS1_RESET\] "
+    export PS1
+}
+
+set_prompt
 PROMPT_COMMAND='__ps1_strip_prefix'
