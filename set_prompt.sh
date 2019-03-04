@@ -165,10 +165,10 @@ __ps1_strip_prefix()
 __ps1_prefix()
 {
     pref=()
-    if [ ! -z "${VIRTUAL_ENV+x}" ]; then
+    if [ -n "${VIRTUAL_ENV+x}" ]; then
         pref+=("$(basename "$VIRTUAL_ENV")")
     fi
-    if [ ! -z "${VIRTUAL_ENV_TOOLS+x}" ]; then
+    if [ -n "${VIRTUAL_ENV_TOOLS+x}" ] && [ -n "${ENV_NAME_TOOLS}" ]; then
         pref+=("${ENV_NAME_TOOLS}-tools")
     fi
     if [[ "${#pref}" == 0 ]]; then
