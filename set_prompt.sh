@@ -107,24 +107,32 @@ __ps1_color()
 
 __ps1_git_repo()
 {
-    REPO=$(git config --get remote.origin.url || git rev-parse --show-toplevel 2> /dev/null)
+    REPO=$((git config --get remote.origin.url || git rev-parse --show-toplevel) 2> /dev/null)
     if [ $? -eq 0 ]; then
-        printf "$(basename ${REPO%.git})"
+        printf "$(basename ${REPO%%.git})"
+    else
+        return 1
     fi
 }
 
 __ps1_git_branch()
 {
-    REPO="$(__ps1_git_repo)"
-    BRANCH="$(git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/\1/')"
-    if [[ "$REPO" ]]; then
-        if [ -z "$BRANCH" ]; then
-            BRANCH="$(git status 2> /dev/null | grep -oP '(?<=On branch ).*')"
+    status="$1"
+    # REPO="$(__ps1_git_repo)"
+    if __ps1_git_repo &> /dev/null; then
+        BRANCH="$(git rev-parse --abbrev-ref HEAD 2> /dev/null)"
+        if [ "$BRANCH" == 'HEAD' ]; then
+            BRANCH="HEAD detached at $(git rev-parse --short HEAD 2> /dev/null)"
+            if [ "$?" -ne 0 ]; then
+                BRANCH='EMPTY REPOSITORY'
+            fi
         else
             BRANCH="${BRANCH//\(}"
             BRANCH="${BRANCH//\)}"
         fi
         printf "$BRANCH"
+    else
+        return 1
     fi
 }
 
@@ -178,12 +186,13 @@ __ps1_bold()
 
 git_dirty()
 {
-    git status | grep -E "Changes not staged|Untracked files|Unmerged Paths" > /dev/null
+    ! git diff-files --no-ext-diff --quiet 2> /dev/null ||
+    [ -n "$(git ls-files --others --exclude-standard --directory --no-empty-directory --error-unmatch -- ':/*' 2> /dev/null)" ]
 }
 
 git_staged()
 {
-    git status | grep 'Changes to be committed' > /dev/null
+    ! git diff-index --no-ext-diff --quiet --cached HEAD 2> /dev/null
 }
 
 set_prompt()
@@ -220,8 +229,7 @@ set_prompt()
     PS1+='printf "\[${boldPrefix}${colorPrefix}\]$prefix\[$_PS1_RESET\]";'
     PS1+='fi;'
     if [[ $SHOW_GIT_INFO == 1 ]]; then
-    #     PS1+='printf "\[$(__ps1_git_info)\]" && tput el1;'
-        PS1+='if git status &> /dev/null; then '
+        PS1+='if git rev-parse --is-inside-work-tree &> /dev/null; then '
         PS1+='printf "(";'
         PS1+='printf "\[${boldRepo}${colorRepo}\]$(__ps1_git_repo)\[$_PS1_RESET\]: ";'
         PS1+='printf "\[${boldBranch}";'
